@@ -43,6 +43,7 @@ def get_current_version(appName=None):
 
     return appPlistInfo['CFBundleShortVersionString']
 
+
 appCurrentVer = get_current_version()
 appOnlineVer = extract_online_version(
     'https://www.macupdate.com/app/mac/34344/alfred')
