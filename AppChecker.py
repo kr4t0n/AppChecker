@@ -1,10 +1,16 @@
+# coding=utf-8
 from __future__ import print_function
 import plistlib
 import requests
+import os
+import sys
+import ConfigParser
+import pymongo
 from functools import wraps
 from bs4 import BeautifulSoup
 
-app = ['Alfred 3']
+reload(sys)
+sys.setdefaultencoding('utf-8')
 
 
 def log(debug=True):
@@ -22,31 +28,108 @@ def log(debug=True):
     return _log
 
 
-@log(False)
-def load_page_html(url):
-    ''' Obtain the page's HTML content '''
-    return requests.get(url).content
+class MongoDB(object):
+
+    def __init__(self, collection_name):
+        ''' Read MongoDB Configuration from MongoDB.conf '''
+
+        currPath = os.getcwd()
+        cf = ConfigParser.ConfigParser()
+        cf.read(currPath + '/MongoDB.conf')
+
+        self.db_host = cf.get('MongoDB', 'db_host')
+        self.db_port = cf.getint('MongoDB', 'db_port')
+        self.db_name = cf.get('MongoDB', 'db_name')
+        self.db = None
+        self.collection_name = collection_name
+
+    def connect_db(self):
+        ''' Connect to MongoDB using configuration '''
+
+        self.client = pymongo.MongoClient(host=self.db_host, port=self.db_port)
+        self.db = self.client[self.db_name]
+        self.collection = self.db[self.collection_name]
+
+    def get_all_docs(self):
+        ''' Return all documents in the collection sorting with name'''
+
+        try:
+            all_docs = self.collection.find({}, {'_id': 0})
+            all_docs_sort = all_docs.sort('Name', pymongo.ASCENDING)
+            docsList = []
+            for item in all_docs_sort:
+                docsList.append(item)
+        except AttributeError as e:
+            print('ERROR 0x001: Please connect MongoDB first!\n')
+            raise e
+
+        return docsList
+
+    def __del__(self):
+        if self.db is not None:
+            self.db.logout()
 
 
-def extract_online_version(url):
-    ''' Extract the APP Version from MacUpdate '''
-    html_content = load_page_html(url)
-    soup = BeautifulSoup(html_content, 'lxml')
-    appVersion = soup.select('div#app-info-version-data > h4 > a')
-    appVersionStr = str(appVersion[0].get_text()).strip()
-    return appVersionStr
+class AppChecker(object):
+
+    def __init__(self, appList):
+        self.appList = appList
+
+    @log(False)
+    def load_page_html(self, url):
+        ''' Obtain the page's HTML content '''
+
+        return requests.get(url).content
+
+    def extract_online_version(self, url):
+        ''' Extract the APP Version from MacUpdate '''
+
+        html_content = self.load_page_html(url)
+        soup = BeautifulSoup(html_content, 'lxml')
+        appVersion = soup.select('div#app-info-version-data > h4 > a')
+        appVersionStr = str(appVersion[0].get_text()).strip()
+        return appVersionStr
+
+    def get_current_version(self, appName=None):
+        ''' Extract the APP Current Version from its plist file '''
+
+        appPlistInfo = plistlib.readPlist(
+            '/Applications/{}.app/Contents/Info.plist'.format(appName))
+
+        return appPlistInfo['CFBundleShortVersionString']
+
+    def check_ver(self):
+        ''' Check APP Version and Print '''
+
+        print('%-10s | %-10s | %-10s | %-10s |' %
+              ('App', 'CurVer', 'NewVer', 'Status'))
+        print('---------- | ---------- | ---------- | ---------- |')
+        for app in self.appList:
+            appName = app['Name']
+            appURL = app['URL']
+            appVer = app['Version']
+
+            appCurrentVer = self.get_current_version(appName)
+            appOnlineVer = self.extract_online_version(appURL)
+
+            if appVer != appCurrentVer:
+                appVer = appCurrentVer
+
+            if appCurrentVer >= appOnlineVer:
+                print('%-10s | %-10s | %-10s | %-10s |' %
+                      (appName, appCurrentVer, appOnlineVer, '✔'))
+            else:
+                print('%-10s | %-10s | %-10s |            |' %
+                      (appName, appCurrentVer, appOnlineVer))
 
 
-def get_current_version(appName=None):
-    appPlistInfo = plistlib.readPlist(
-        '/Applications/Alfred 3.app/Contents/Info.plist')
+def main():
+    db_appInfo = MongoDB('AppInfo')
+    db_appInfo.connect_db()
+    appInfo = db_appInfo.get_all_docs()
+    appChecker = AppChecker(appInfo)
+    appChecker.check_ver()
 
-    return appPlistInfo['CFBundleShortVersionString']
 
-
-appCurrentVer = get_current_version()
-appOnlineVer = extract_online_version(
-    'https://www.macupdate.com/app/mac/34344/alfred')
-
-print('---------- | ---------- | ---------- |')
-print('%-10s | %-10s | %-10s |' % ('Alfred', appCurrentVer, appOnlineVer))
+if __name__ == '__main__':
+    main()
