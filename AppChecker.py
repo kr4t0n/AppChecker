@@ -30,25 +30,28 @@ def log(debug=True):
 
 class MongoDB(object):
 
-    def __init__(self, collection_name):
+    def __init__(self, confPath=None, collectionName=None):
         ''' Read MongoDB Configuration from MongoDB.conf '''
 
-        currPath = os.getcwd()
         cf = ConfigParser.ConfigParser()
-        cf.read(currPath + '/MongoDB.conf')
+        if confPath is None:
+            currPath = os.getcwd()
+            cf.read(currPath + '/MongoDB.conf')
+        else:
+            cf.read(confPath)
 
         self.db_host = cf.get('MongoDB', 'db_host')
         self.db_port = cf.getint('MongoDB', 'db_port')
         self.db_name = cf.get('MongoDB', 'db_name')
         self.db = None
-        self.collection_name = collection_name
+        self.collectionName = collectionName
 
     def connect_db(self):
         ''' Connect to MongoDB using configuration '''
 
         self.client = pymongo.MongoClient(host=self.db_host, port=self.db_port)
         self.db = self.client[self.db_name]
-        self.collection = self.db[self.collection_name]
+        self.collection = self.db[self.collectionName]
 
     def get_all_docs(self, sortAttri=None):
         ''' Return all documents in the collection sorting with sortAttri'''
@@ -132,7 +135,7 @@ class AppChecker(object):
 
 
 def main():
-    db_appInfo = MongoDB('AppInfo')
+    db_appInfo = MongoDB(collectionName='AppInfo')
     db_appInfo.connect_db()
     appInfo = db_appInfo.get_all_docs('Name')
     appChecker = AppChecker(appInfo)
