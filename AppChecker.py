@@ -30,32 +30,38 @@ def log(debug=True):
 
 class MongoDB(object):
 
-    def __init__(self, collection_name):
+    def __init__(self, confPath=None, collectionName=None):
         ''' Read MongoDB Configuration from MongoDB.conf '''
 
-        currPath = os.getcwd()
         cf = ConfigParser.ConfigParser()
-        cf.read(currPath + '/MongoDB.conf')
+        if confPath is None:
+            currPath = os.getcwd()
+            cf.read(currPath + '/MongoDB.conf')
+        else:
+            cf.read(confPath)
 
         self.db_host = cf.get('MongoDB', 'db_host')
         self.db_port = cf.getint('MongoDB', 'db_port')
         self.db_name = cf.get('MongoDB', 'db_name')
         self.db = None
-        self.collection_name = collection_name
+        self.collectionName = collectionName
 
     def connect_db(self):
         ''' Connect to MongoDB using configuration '''
 
         self.client = pymongo.MongoClient(host=self.db_host, port=self.db_port)
         self.db = self.client[self.db_name]
-        self.collection = self.db[self.collection_name]
+        self.collection = self.db[self.collectionName]
 
-    def get_all_docs(self):
-        ''' Return all documents in the collection sorting with name'''
+    def get_all_docs(self, sortAttri=None):
+        ''' Return all documents in the collection sorting with sortAttri'''
 
         try:
             all_docs = self.collection.find({}, {'_id': 0})
-            all_docs_sort = all_docs.sort('Name', pymongo.ASCENDING)
+            if sortAttri is not None:
+                all_docs_sort = all_docs.sort(sortAttri, pymongo.ASCENDING)
+            else:
+                all_docs_sort = all_docs
             docsList = []
             for item in all_docs_sort:
                 docsList.append(item)
@@ -64,6 +70,11 @@ class MongoDB(object):
             raise e
 
         return docsList
+
+    def insert_one_doc(self):
+        ''' Insert one documents in the collection '''
+
+        return 0
 
     def __del__(self):
         if self.db is not None:
@@ -124,9 +135,9 @@ class AppChecker(object):
 
 
 def main():
-    db_appInfo = MongoDB('AppInfo')
+    db_appInfo = MongoDB(collectionName='AppInfo')
     db_appInfo.connect_db()
-    appInfo = db_appInfo.get_all_docs()
+    appInfo = db_appInfo.get_all_docs('Name')
     appChecker = AppChecker(appInfo)
     appChecker.check_ver()
 
