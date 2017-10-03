@@ -50,12 +50,15 @@ class MongoDB(object):
         self.db = self.client[self.db_name]
         self.collection = self.db[self.collection_name]
 
-    def get_all_docs(self):
-        ''' Return all documents in the collection sorting with name'''
+    def get_all_docs(self, sortAttri=None):
+        ''' Return all documents in the collection sorting with sortAttri'''
 
         try:
             all_docs = self.collection.find({}, {'_id': 0})
-            all_docs_sort = all_docs.sort('Name', pymongo.ASCENDING)
+            if sortAttri is not None:
+                all_docs_sort = all_docs.sort(sortAttri, pymongo.ASCENDING)
+            else:
+                all_docs_sort = all_docs
             docsList = []
             for item in all_docs_sort:
                 docsList.append(item)
@@ -64,6 +67,11 @@ class MongoDB(object):
             raise e
 
         return docsList
+
+    def insert_one_doc(self):
+        ''' Insert one documents in the collection '''
+
+        return 0
 
     def __del__(self):
         if self.db is not None:
@@ -126,7 +134,7 @@ class AppChecker(object):
 def main():
     db_appInfo = MongoDB('AppInfo')
     db_appInfo.connect_db()
-    appInfo = db_appInfo.get_all_docs()
+    appInfo = db_appInfo.get_all_docs('Name')
     appChecker = AppChecker(appInfo)
     appChecker.check_ver()
 
