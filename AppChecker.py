@@ -68,13 +68,57 @@ class MongoDB(object):
         except AttributeError as e:
             print('ERROR 0x001: Please connect MongoDB first!\n')
             raise e
+        except Exception as e:
+            raise e
 
         return docsList
 
-    def insert_one_doc(self):
-        ''' Insert one documents in the collection '''
+    def insert_one_doc(self, insertDoc=None):
+        ''' Insert one document in the collection '''
 
-        return 0
+        try:
+            insertDocID = self.collection.insert(insertDoc)
+        except AttributeError as e:
+            print('ERROR 0x001: Please connect MongoDB first!\n')
+            raise e
+        except Exception as e:
+            raise e
+
+        return insertDocID
+
+    def isnert_multi_docs(self, insertDocs=None):
+        ''' Insert multiple documents in the collection '''
+
+        try:
+            insertDocsID = self.collection.insert(insertDocs)
+        except AttributeError as e:
+            print('ERROR 0x001: Please connect MongoDB first!\n')
+            raise e
+        except Exception as e:
+            raise e
+
+        return insertDocsID
+
+    def update_one_doc(self, updateCond=None, updateDoc=None):
+        ''' Update one document in the collection
+            If cannot find the existed one
+            the method will insert a new document
+            Returning the after-method documents'''
+
+        try:
+            afterDoc = self.collection.find_one_and_update(
+                updateCond,
+                updateDoc,
+                projection={'_id': False},
+                upsert=True,
+                return_document=pymongo.ReturnDocument.AFTER)
+        except AttributeError as e:
+            print('ERROR 0x001: Please connect MongoDB first!\n')
+            raise e
+        except Exception as e:
+            raise e
+
+        return afterDoc
 
     def __del__(self):
         if self.db is not None:
@@ -83,8 +127,10 @@ class MongoDB(object):
 
 class AppChecker(object):
 
-    def __init__(self, appList):
-        self.appList = appList
+    def __init__(self, collectionName=None):
+        self.db_appInfo = MongoDB(collectionName='AppInfo')
+        self.db_appInfo.connect_db()
+        self.appList = self.db_appInfo.get_all_docs(sortAttri='Name')
 
     @log(False)
     def load_page_html(self, url):
@@ -104,41 +150,71 @@ class AppChecker(object):
     def get_current_version(self, appName=None):
         ''' Extract the APP Current Version from its plist file '''
 
-        appPlistInfo = plistlib.readPlist(
-            '/Applications/{}.app/Contents/Info.plist'.format(appName))
+        try:
+            appPlistInfo = plistlib.readPlist(
+                '/Applications/{}.app/Contents/Info.plist'.format(appName))
+            return appPlistInfo['CFBundleShortVersionString']
+        except Exception as e:
+            print('/Applications/{}.app/Contents/Info.plist'.format(appName))
+            print(e)
+            CFBundleShortVersionString = '0.0'
+            return CFBundleShortVersionString
 
-        return appPlistInfo['CFBundleShortVersionString']
+    def update_ver(self):
+        ''' Update current APP Version in MAC '''
+
+        appNames = os.listdir('/Applications')
+        appNameList = []
+
+        # Check the filename with app extension
+        for item in appNames:
+            if '.app' in item:
+                appNameList.append(item[:-4])
+
+        # Check the app version corresponding the appName in the list
+        for appName in appNameList:
+            appCurrentVer = self.get_current_version(appName)
+            self.db_appInfo.update_one_doc(
+                {'Name': appName}, {'$set': {'Version': appCurrentVer}})
+
+        return 0
 
     def check_ver(self):
         ''' Check APP Version and Print '''
 
-        print('%-10s | %-10s | %-10s | %-10s |' %
+        print('%-18s | %-18s | %-18s | %-10s |' %
               ('App', 'CurVer', 'NewVer', 'Status'))
-        print('---------- | ---------- | ---------- | ---------- |')
+        print(('------------------ | ------------------ |'
+               ' ------------------ | ---------- |'))
         for app in self.appList:
             appName = app['Name']
             appURL = app['URL']
             appVer = app['Version']
+
+            if appURL == '':
+                continue
 
             appCurrentVer = self.get_current_version(appName)
             appOnlineVer = self.extract_online_version(appURL)
 
             if appVer != appCurrentVer:
                 appVer = appCurrentVer
+                self.db_appInfo.update_one_doc(
+                    {'Name': appName}, {'$set': {'Version': str(appVer)}})
 
             if appCurrentVer >= appOnlineVer:
-                print('%-10s | %-10s | %-10s | %-10s |' %
+                print('%-18s | %-18s | %-18s | %-10s |' %
                       (appName, appCurrentVer, appOnlineVer, '✔'))
             else:
-                print('%-10s | %-10s | %-10s |            |' %
+                print('%-18s | %-18s | %-18s |            |' %
                       (appName, appCurrentVer, appOnlineVer))
+
+        return 0
 
 
 def main():
-    db_appInfo = MongoDB(collectionName='AppInfo')
-    db_appInfo.connect_db()
-    appInfo = db_appInfo.get_all_docs('Name')
-    appChecker = AppChecker(appInfo)
+    appChecker = AppChecker()
+    # appChecker.update_ver()
     appChecker.check_ver()
 
 
