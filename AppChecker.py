@@ -1,5 +1,6 @@
 # coding=utf-8
 from __future__ import print_function
+from distutils.version import LooseVersion
 import plistlib
 import requests
 import os
@@ -197,12 +198,15 @@ class AppChecker(object):
             appCurrentVer = self.get_current_version(appName)
             appOnlineVer = self.extract_online_version(appURL)
 
+            lsappCurrentVer = LooseVersion(appCurrentVer)
+            lsappOnlineVer = LooseVersion(appOnlineVer)
+
             if appVer != appCurrentVer:
                 appVer = appCurrentVer
                 self.db_appInfo.update_one_doc(
                     {'Name': appName}, {'$set': {'Version': str(appVer)}})
 
-            if appCurrentVer >= appOnlineVer:
+            if cmp(lsappCurrentVer, lsappOnlineVer) != -1:
                 print('%-18s | %-18s | %-18s | %-10s |' %
                       (appName, appCurrentVer, appOnlineVer, '✔'))
             else:
